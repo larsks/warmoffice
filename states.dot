@@ -1,0 +1,26 @@
+digraph {
+  OFF
+  IDLE
+  TRACKING
+  ACTIVE
+  LOCKED
+
+  OFF -> IDLE [style=dotted]
+
+  IDLE -> TRACKING
+  TRACKING -> IDLE
+  TRACKING -> ACTIVE
+  ACTIVE -> IDLE
+
+  OFF -> LOCKED [style=dotted]
+  IDLE -> LOCKED [style=dotted]
+  TRACKING -> LOCKED [style=dotted]
+  ACTIVE -> LOCKED [style=dotted]
+
+  LOCKED -> OFF [style=dotted]
+  LOCKED -> PREWARM [style=dotted]
+  LOCKED -> IDLE [style=dotted]
+
+  OFF -> PREWARM [style=dotted]
+  IDLE -> PREWARM [style=dotted]
+}
