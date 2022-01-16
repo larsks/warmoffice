@@ -54,16 +54,19 @@ func (therm *Thermostat) Loop() {
 
 	for loop := true; loop; {
 		temp := therm.TempSensor.Read()
+		delta := therm.SetTemp - temp
 
 		log.Debug().
 			Int("have", temp).
 			Int("want", therm.SetTemp).
+			Int("delta", delta).
+			Int("maxdelta", therm.MaxDelta).
 			Bool("active", therm.Heat).
 			Bool("switch", therm.RemoteSwitch.On).
-			Msg("thermostat active")
+			Msg("thermostat running")
 
 		if therm.Heat {
-			if (therm.SetTemp - temp) > therm.MaxDelta {
+			if delta > therm.MaxDelta {
 				if !therm.RemoteSwitch.On {
 					therm.RemoteSwitch.TurnOn()
 				}
