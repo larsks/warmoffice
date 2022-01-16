@@ -1,12 +1,12 @@
 [Unit]
-Conflicts = warmoffice-prewarm.service
+Conflicts = warmoffice.service
 
 [Service]
 Environment=WARMOFFICE_VERBOSE=1
-EnvironmentFile = /etc/warmoffice/warmoffice.env
+EnvironmentFile=/etc/warmoffice/warmoffice.env
 ExecStart = /home/pi/warmoffice -v $WARMOFFICE_VERBOSE \
 	--temp-sensor-id $WARMOFFICE_TEMP_SENSOR_ID \
-	-s IDLE \
+	-s PREWARM --prewarm $WARMOFFICE_PREWARM_PERIOD \
 	--on $WARMOFFICE_ONCODE \
 	--off $WARMOFFICE_OFFCODE
 

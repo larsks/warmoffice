@@ -1,0 +1,5 @@
+[Timer]
+OnCalendar=7:00
+
+[Install]
+WantedBy=timers.targets
