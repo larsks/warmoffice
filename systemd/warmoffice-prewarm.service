@@ -1,5 +1,6 @@
 [Unit]
 Conflicts = warmoffice.service
+After = warmoffice.service
 
 [Service]
 Environment=WARMOFFICE_VERBOSE=1

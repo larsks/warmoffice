@@ -1,5 +1,6 @@
 [Unit]
 Conflicts=warmoffice.service
+After=warmoffice.service
 
 [Service]
 Type = oneshot

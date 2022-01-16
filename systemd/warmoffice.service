@@ -1,5 +1,6 @@
 [Unit]
 Conflicts = warmoffice-prewarm.service
+After = warmoffice-prewarm.service
 
 [Service]
 Environment=WARMOFFICE_VERBOSE=1
