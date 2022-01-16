@@ -9,7 +9,6 @@ import (
 	"warmoffice/sensors"
 	"warmoffice/states"
 
-	"github.com/martinohmann/rfoutlet/pkg/gpio"
 	rfoutlet "github.com/martinohmann/rfoutlet/pkg/gpio"
 	"github.com/mkideal/cli"
 	"github.com/rs/zerolog"
@@ -23,19 +22,19 @@ type (
 
 		InitialState    string  `cli:"s,state" dft:"OFF"`
 		Chip            string  `cli:"chip" dft:"gpiochip0"`
-		MotionPin       int     `cli:"motion-pin" dft:"22"`
-		TxPin           int     `cli:"tx-pin" dft:"17"`
+		MotionPin       uint    `cli:"motion-pin" dft:"22"`
+		TxPin           uint    `cli:"tx-pin" dft:"17"`
 		OnCode          uint64  `cli:"on"`
 		OffCode         uint64  `cli:"off"`
-		TxProtocol      int     `cli:"protocol" dft:"1"`
+		TxProtocol      uint    `cli:"protocol" dft:"1"`
 		PulseLength     uint    `cli:"l,pulse-length" dft:"200"`
 		PrewarmTime     string  `cli:"prewarm" dft:"60m"`
 		MinActivityTime string  `cli:"A,min-activity" dft:"10m"`
 		MaxIdleTime     string  `cli:"I,max-idle" dft:"90m"`
 		RecentTime      string  `cli:"R,recent" dft:"2m"`
-		Verbose         int     `cli:"v,verbose" dft:"1"`
+		Verbose         uint    `cli:"v,verbose" dft:"1"`
 		TempSensorID    string  `cli:"T,temp-sensor-id"`
-		TargetTemp      float64 `cli:"t,temp" dft:"72"`
+		TargetTemp      float64 `cli:"t,temp" dft:"22"`
 	}
 
 	Application struct {
@@ -49,9 +48,8 @@ type (
 		RecentTime      time.Duration
 		Chip            *gpiod.Chip
 		MotionSensor    *sensors.MotionSensor
-		TempSensor      *sensors.DS1820
 		Timer           time.Time
-		Transmitter     *rfoutlet.Transmitter
+		Heater          *Thermostat
 	}
 )
 
@@ -97,40 +95,24 @@ func NewApplication(args *Options) *Application {
 		sensors.WithRecentActivityThreshold(app.RecentTime))
 	app.MotionSensor.InitLastActivity()
 
-	app.TempSensor = sensors.NewDS1820(args.TempSensorID)
-	app.TempSensor.Start()
-
-	tx, err := rfoutlet.NewTransmitter(app.Chip, args.TxPin,
+	tx, err := rfoutlet.NewTransmitter(app.Chip, int(args.TxPin),
 		rfoutlet.TransmissionCount(3))
 	if err != nil {
 		panic(err)
 	}
-	app.Transmitter = tx
+
+	tempsensor := sensors.NewDS1820(args.TempSensorID)
+	rs := NewRemoteSwitch("heater", tx, args.OnCode, args.OffCode,
+		WithProtocol(args.TxProtocol-1),
+		WithPulseLength(args.PulseLength))
+
+	app.Heater = NewThermostat(int(args.TargetTemp*1000), rs, tempsensor)
 
 	log.Info().Msgf("using gpio chip %s", args.Chip)
 	log.Info().Msgf("motion sensor using pin %d", args.MotionPin)
 	log.Info().Msgf("tx using pin %d", args.TxPin)
-	log.Info().Msgf("tx protocol %d, pulse length %d", args.TxProtocol, args.PulseLength)
 
 	return app
-}
-
-func (app *Application) TurnSwitchOn() {
-	log.Info().Msgf("turn switch on (code %d)", app.Options.OnCode)
-
-	res := app.Transmitter.Transmit(app.Options.OnCode,
-		gpio.DefaultProtocols[app.Options.TxProtocol-1],
-		app.Options.PulseLength)
-	<-res
-}
-
-func (app *Application) TurnSwitchOff() {
-	log.Info().Msgf("turn switch off (code %d)", app.Options.OffCode)
-
-	res := app.Transmitter.Transmit(app.Options.OffCode,
-		gpio.DefaultProtocols[app.Options.TxProtocol-1],
-		app.Options.PulseLength)
-	<-res
 }
 
 func (app *Application) InitTimer() {
@@ -140,7 +122,7 @@ func (app *Application) InitTimer() {
 func (app *Application) Close() {
 	log.Info().Msgf("cleaning up")
 	app.MotionSensor.Close()
-	app.Transmitter.Close()
+	app.Heater.Close()
 }
 
 func (app *Application) NextState(state states.State) {
@@ -169,13 +151,13 @@ func (app *Application) Loop() {
 	var prev_state states.State
 
 	app.WaitForSignals()
+	app.Heater.Start()
 
 	for !app.QuitFlag {
-		log.Debug().Msgf("state = %s, delta = %s, lastactive = %s, temp = %d",
+		log.Debug().Msgf("state = %s, delta = %s, lastactive = %s",
 			app.State,
 			time.Since(app.Timer),
-			time.Since(app.MotionSensor.LastActivity),
-			app.TempSensor.Temp)
+			time.Since(app.MotionSensor.LastActivity))
 
 		start_state := app.State
 
@@ -185,13 +167,13 @@ func (app *Application) Loop() {
 
 		case states.OFF:
 			if prev_state != states.OFF {
-				app.TurnSwitchOff()
+				app.Heater.HeatOn()
 			}
 
 		case states.PREWARM:
 			if prev_state != states.PREWARM {
 				log.Info().Msgf("PREWARM ends in %s", app.PrewarmTime)
-				app.TurnSwitchOn()
+				app.Heater.HeatOff()
 			}
 
 			if time.Since(app.Timer) > app.PrewarmTime {
@@ -200,7 +182,7 @@ func (app *Application) Loop() {
 
 		case states.IDLE:
 			if prev_state != states.IDLE {
-				app.TurnSwitchOff()
+				app.Heater.HeatOff()
 			}
 
 			if app.MotionSensor.RecentActivity() {
@@ -211,7 +193,7 @@ func (app *Application) Loop() {
 			if prev_state != states.TRACKING {
 				log.Info().Msgf("Tracking for %s", app.MinActivityTime)
 				log.Info().Msgf("Recent activity threshold is %s", app.RecentTime)
-				app.TurnSwitchOn()
+				app.Heater.HeatOn()
 			}
 
 			if !app.MotionSensor.RecentActivity() {
@@ -225,7 +207,7 @@ func (app *Application) Loop() {
 		case states.ACTIVE:
 			if prev_state != states.ACTIVE {
 				log.Info().Msgf("Max idle time is %s", app.MaxIdleTime)
-				app.TurnSwitchOn()
+				app.Heater.HeatOn()
 			}
 
 			if time.Since(app.MotionSensor.LastActivity) > app.MaxIdleTime {
@@ -234,10 +216,10 @@ func (app *Application) Loop() {
 		}
 
 		prev_state = start_state
-		time.Sleep(1 * time.Second)
+		time.Sleep(1000 * time.Millisecond)
 	}
 
-	app.TurnSwitchOff()
+	app.Heater.Stop()
 }
 
 func main() {

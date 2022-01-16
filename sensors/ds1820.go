@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -21,6 +22,7 @@ type (
 
 		dev_path string
 		quitflag chan struct{}
+		mu       sync.Mutex
 	}
 )
 
@@ -44,18 +46,17 @@ func NewDS1820(id string) *DS1820 {
 	return &ds
 }
 
-func (ds *DS1820) reader() {
+func (ds *DS1820) Loop() {
 	var lastread time.Time
 
 	temp_path := filepath.Join(ds.dev_path, "temperature")
 
 	log.Debug().Str("id", ds.Id).Msg("entering read loop")
 
-	for {
-		//nolint
+	for loop := true; loop; {
 		select {
 		case <-ds.quitflag:
-			break
+			loop = false
 		default:
 			if time.Since(lastread) > (1 * time.Minute) {
 				val, err := ioutil.ReadFile(temp_path)
@@ -68,7 +69,9 @@ func (ds *DS1820) reader() {
 					panic(err)
 				}
 				log.Debug().Str("id", ds.Id).Int("temp", temp).Msg("read temperature")
+				ds.mu.Lock()
 				ds.Temp = temp
+				ds.mu.Unlock()
 				lastread = time.Now()
 			}
 
@@ -76,15 +79,22 @@ func (ds *DS1820) reader() {
 		}
 	}
 
-	//nolint
 	log.Debug().Str("id", ds.Id).Msg("exit read loop")
 }
 
 func (ds *DS1820) Start() {
+	log.Debug().Str("id", ds.Id).Msg("starting")
 	ds.quitflag = make(chan struct{})
-	go ds.reader()
+	go ds.Loop()
 }
 
 func (ds *DS1820) Stop() {
+	log.Debug().Str("id", ds.Id).Msg("stopping")
 	close(ds.quitflag)
+}
+
+func (ds *DS1820) Read() int {
+	ds.mu.Lock()
+	defer ds.mu.Unlock()
+	return ds.Temp
 }

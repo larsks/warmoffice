@@ -25,13 +25,13 @@ func WithRecentActivityThreshold(d time.Duration) MotionSensorOption {
 	}
 }
 
-func NewMotionSensor(chip *gpiod.Chip, pin int, options ...MotionSensorOption) *MotionSensor {
+func NewMotionSensor(chip *gpiod.Chip, pin uint, options ...MotionSensorOption) *MotionSensor {
 	sensor := MotionSensor{
 		Chip:                    chip,
 		RecentActivityThreshold: 2 * time.Minute,
 	}
 
-	line, err := chip.RequestLine(pin, gpiod.AsInput,
+	line, err := chip.RequestLine(int(pin), gpiod.AsInput,
 		gpiod.WithEventHandler(sensor.UpdateLastActivity), gpiod.WithBothEdges)
 	if err != nil {
 		panic(err)
