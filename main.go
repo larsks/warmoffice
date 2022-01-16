@@ -21,19 +21,21 @@ type (
 	Options struct {
 		cli.Helper
 
-		InitialState    string `cli:"s,state" dft:"OFF"`
-		Chip            string `cli:"c,chip" dft:"gpiochip0"`
-		MotionPin       int    `cli:"m,motion-pin" dft:"22"`
-		TxPin           int    `cli:"t,tx-pin" dft:"17"`
-		OnCode          uint64 `cli:"on"`
-		OffCode         uint64 `cli:"off"`
-		TxProtocol      int    `cli:"protocol" dft:"1"`
-		PulseLength     uint   `cli:"l,pulse-length" dft:"200"`
-		PrewarmTime     string `cli:"prewarm" dft:"60m"`
-		MinActivityTime string `cli:"A,min-activity" dft:"10m"`
-		MaxIdleTime     string `cli:"I,max-idle" dft:"90m"`
-		RecentTime      string `cli:"R,recent" dft:"2m"`
-		Verbose         int    `cli:"v,verbose" dft:"1"`
+		InitialState    string  `cli:"s,state" dft:"OFF"`
+		Chip            string  `cli:"chip" dft:"gpiochip0"`
+		MotionPin       int     `cli:"motion-pin" dft:"22"`
+		TxPin           int     `cli:"tx-pin" dft:"17"`
+		OnCode          uint64  `cli:"on"`
+		OffCode         uint64  `cli:"off"`
+		TxProtocol      int     `cli:"protocol" dft:"1"`
+		PulseLength     uint    `cli:"l,pulse-length" dft:"200"`
+		PrewarmTime     string  `cli:"prewarm" dft:"60m"`
+		MinActivityTime string  `cli:"A,min-activity" dft:"10m"`
+		MaxIdleTime     string  `cli:"I,max-idle" dft:"90m"`
+		RecentTime      string  `cli:"R,recent" dft:"2m"`
+		Verbose         int     `cli:"v,verbose" dft:"1"`
+		TempSensorID    string  `cli:"T,temp-sensor-id"`
+		TargetTemp      float64 `cli:"t,temp" dft:"72"`
 	}
 
 	Application struct {
@@ -47,6 +49,7 @@ type (
 		RecentTime      time.Duration
 		Chip            *gpiod.Chip
 		MotionSensor    *sensors.MotionSensor
+		TempSensor      *sensors.DS1820
 		Timer           time.Time
 		Transmitter     *rfoutlet.Transmitter
 	}
@@ -93,6 +96,9 @@ func NewApplication(args *Options) *Application {
 	app.MotionSensor = sensors.NewMotionSensor(app.Chip, args.MotionPin,
 		sensors.WithRecentActivityThreshold(app.RecentTime))
 	app.MotionSensor.InitLastActivity()
+
+	app.TempSensor = sensors.NewDS1820(args.TempSensorID)
+	app.TempSensor.Start()
 
 	tx, err := rfoutlet.NewTransmitter(app.Chip, args.TxPin,
 		rfoutlet.TransmissionCount(3))
@@ -165,10 +171,11 @@ func (app *Application) Loop() {
 	app.WaitForSignals()
 
 	for !app.QuitFlag {
-		log.Debug().Msgf("state = %s, delta = %s, lastactive = %s",
+		log.Debug().Msgf("state = %s, delta = %s, lastactive = %s, temp = %d",
 			app.State,
 			time.Since(app.Timer),
-			time.Since(app.MotionSensor.LastActivity))
+			time.Since(app.MotionSensor.LastActivity),
+			app.TempSensor.Temp)
 
 		start_state := app.State
 
