@@ -173,7 +173,7 @@ func (app *Application) Loop() {
 		case states.PREWARM:
 			if prev_state != states.PREWARM {
 				log.Info().Msgf("PREWARM ends in %s", app.PrewarmTime)
-				app.Heater.HeatOff()
+				app.Heater.HeatOn()
 			}
 
 			if time.Since(app.Timer) > app.PrewarmTime {
