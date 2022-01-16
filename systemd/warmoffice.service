@@ -1,0 +1,5 @@
+[Service]
+ExecStart = /home/pi/warmoffice -s PREWARM --prewarm 90m --on 349955 --off 349964
+
+[Install]
+WantedBy = multi-user.target

@@ -1,0 +1,6 @@
+[Unit]
+Conflicts=warmoffice.service
+
+[Service]
+Type = oneshot
+ExecStart = /bin/echo "stopping warmoffice"

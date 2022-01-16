@@ -1,0 +1,6 @@
+[Timer]
+OnCalendar=5:30
+Unit=warmoffice.service
+
+[Install]
+WantedBy=timers.targets
