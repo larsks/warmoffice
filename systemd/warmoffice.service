@@ -1,5 +1,12 @@
 [Service]
-ExecStart = /home/pi/warmoffice -s PREWARM --prewarm 90m --on 349955 --off 349964
+Environment=WARMOFFICE_PREWARM_PERIOD=90m
+Environment=WARMOFFICE_INITIAL_STATE=PREWARM
+EnvironmentFile=/etc/warmoffice/warmoffice.env
+ExecStart = /home/pi/warmoffice -v1 \
+	--temp-sensor-id $WARMOFFICE_TEMP_SENSOR_ID \
+	-s $WARMOFFICE_INITIAL_STATE \
+	--prewarm $WARMOFFICE_PREWARM_PERIOD \
+	--on $WARMOFFICE_ONCODE --off $WARMOFFICE_OFFCODE
 
 [Install]
 WantedBy = multi-user.target
