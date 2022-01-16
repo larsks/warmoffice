@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -13,6 +12,8 @@ import (
 	"github.com/martinohmann/rfoutlet/pkg/gpio"
 	rfoutlet "github.com/martinohmann/rfoutlet/pkg/gpio"
 	"github.com/mkideal/cli"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/warthog618/gpiod"
 )
 
@@ -20,19 +21,19 @@ type (
 	Options struct {
 		cli.Helper
 
-		InitialState string `cli:"s,state" dft:"OFF"`
-		Chip         string `cli:"c,chip" dft:"gpiochip0"`
-		MotionPin    int    `cli:"m,motion-pin" dft:"22"`
-		TxPin        int    `cli:"t,tx-pin" dft:"17"`
-		OnCode       uint64 `cli:"on"`
-		OffCode      uint64 `cli:"off"`
-		TxProtocol   int    `cli:"protocol" dft:"1"`
-		PulseLength  uint   `cli:"l,pulse-length" dft:"200"`
-
+		InitialState    string `cli:"s,state" dft:"OFF"`
+		Chip            string `cli:"c,chip" dft:"gpiochip0"`
+		MotionPin       int    `cli:"m,motion-pin" dft:"22"`
+		TxPin           int    `cli:"t,tx-pin" dft:"17"`
+		OnCode          uint64 `cli:"on"`
+		OffCode         uint64 `cli:"off"`
+		TxProtocol      int    `cli:"protocol" dft:"1"`
+		PulseLength     uint   `cli:"l,pulse-length" dft:"200"`
 		PrewarmTime     string `cli:"prewarm" dft:"60m"`
 		MinActivityTime string `cli:"A,min-activity" dft:"10m"`
 		MaxIdleTime     string `cli:"I,max-idle" dft:"90m"`
 		RecentTime      string `cli:"R,recent" dft:"2m"`
+		Verbose         int    `cli:"v,verbose" dft:"1"`
 	}
 
 	Application struct {
@@ -100,16 +101,16 @@ func NewApplication(args *Options) *Application {
 	}
 	app.Transmitter = tx
 
-	log.Printf("using gpio chip %s", args.Chip)
-	log.Printf("motion sensor using pin %d", args.MotionPin)
-	log.Printf("tx using pin %d", args.TxPin)
-	log.Printf("tx protocol %d, pulse length %d", args.TxProtocol, args.PulseLength)
+	log.Info().Msgf("using gpio chip %s", args.Chip)
+	log.Info().Msgf("motion sensor using pin %d", args.MotionPin)
+	log.Info().Msgf("tx using pin %d", args.TxPin)
+	log.Info().Msgf("tx protocol %d, pulse length %d", args.TxProtocol, args.PulseLength)
 
 	return app
 }
 
 func (app *Application) TurnSwitchOn() {
-	log.Printf("turn switch on (code %d)", app.Options.OnCode)
+	log.Info().Msgf("turn switch on (code %d)", app.Options.OnCode)
 
 	res := app.Transmitter.Transmit(app.Options.OnCode,
 		gpio.DefaultProtocols[app.Options.TxProtocol-1],
@@ -118,7 +119,7 @@ func (app *Application) TurnSwitchOn() {
 }
 
 func (app *Application) TurnSwitchOff() {
-	log.Printf("turn switch off (code %d)", app.Options.OffCode)
+	log.Info().Msgf("turn switch off (code %d)", app.Options.OffCode)
 
 	res := app.Transmitter.Transmit(app.Options.OffCode,
 		gpio.DefaultProtocols[app.Options.TxProtocol-1],
@@ -131,7 +132,7 @@ func (app *Application) InitTimer() {
 }
 
 func (app *Application) Close() {
-	log.Printf("cleaning up")
+	log.Info().Msgf("cleaning up")
 	app.MotionSensor.Close()
 	app.Transmitter.Close()
 }
@@ -141,7 +142,7 @@ func (app *Application) NextState(state states.State) {
 	prev_state := app.State
 	app.State = state
 
-	log.Printf("%s -> %s", prev_state, state)
+	log.Info().Msgf("%s -> %s", prev_state, state)
 }
 
 func (app *Application) Quit() {
@@ -164,7 +165,7 @@ func (app *Application) Loop() {
 	app.WaitForSignals()
 
 	for !app.QuitFlag {
-		log.Printf("state = %s, delta = %s, lastactive = %s",
+		log.Debug().Msgf("state = %s, delta = %s, lastactive = %s",
 			app.State,
 			time.Since(app.Timer),
 			time.Since(app.MotionSensor.LastActivity))
@@ -182,7 +183,7 @@ func (app *Application) Loop() {
 
 		case states.PREWARM:
 			if prev_state != states.PREWARM {
-				log.Printf("PREWARM ends in %s", app.PrewarmTime)
+				log.Info().Msgf("PREWARM ends in %s", app.PrewarmTime)
 				app.TurnSwitchOn()
 			}
 
@@ -201,8 +202,8 @@ func (app *Application) Loop() {
 
 		case states.TRACKING:
 			if prev_state != states.TRACKING {
-				log.Printf("Tracking for %s", app.MinActivityTime)
-				log.Printf("Recent activity threshold is %s", app.RecentTime)
+				log.Info().Msgf("Tracking for %s", app.MinActivityTime)
+				log.Info().Msgf("Recent activity threshold is %s", app.RecentTime)
 				app.TurnSwitchOn()
 			}
 
@@ -216,7 +217,7 @@ func (app *Application) Loop() {
 
 		case states.ACTIVE:
 			if prev_state != states.ACTIVE {
-				log.Printf("Max idle time is %s", app.MaxIdleTime)
+				log.Info().Msgf("Max idle time is %s", app.MaxIdleTime)
 				app.TurnSwitchOn()
 			}
 
@@ -235,6 +236,20 @@ func (app *Application) Loop() {
 func main() {
 	os.Exit(cli.Run(new(Options), func(ctx *cli.Context) error {
 		args := ctx.Argv().(*Options)
+
+		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+
+		var loglevel zerolog.Level
+		switch args.Verbose {
+		case 0:
+			loglevel = zerolog.WarnLevel
+		case 1:
+			loglevel = zerolog.InfoLevel
+		default:
+			loglevel = zerolog.DebugLevel
+		}
+		zerolog.SetGlobalLevel(loglevel)
+
 		app := NewApplication(args)
 		defer app.Close()
 		app.Loop()

@@ -1,9 +1,9 @@
 package sensors
 
 import (
-	"log"
 	"time"
 
+	"github.com/rs/zerolog/log"
 	"github.com/warthog618/gpiod"
 )
 
@@ -50,7 +50,7 @@ func (sensor *MotionSensor) InitLastActivity() {
 }
 
 func (sensor *MotionSensor) UpdateLastActivity(event gpiod.LineEvent) {
-	log.Printf("activity detected")
+	log.Debug().Msg("activity detected")
 	sensor.LastActivity = time.Now()
 }
 
