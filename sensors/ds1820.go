@@ -66,7 +66,10 @@ func (ds *DS1820) Loop() {
 
 				temp, err := strconv.Atoi(strings.TrimSpace(string(val)))
 				if err != nil {
-					log.Error().Str("id", ds.Id).Msg("failed to read temperature")
+					log.Error().
+						Str("id", ds.Id).
+						Int("previous_temp", ds.Temp).
+						Msg("failed to read temperature")
 					continue
 				}
 				log.Debug().Str("id", ds.Id).Int("temp", temp).Msg("read temperature")
