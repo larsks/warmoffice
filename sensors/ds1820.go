@@ -66,7 +66,8 @@ func (ds *DS1820) Loop() {
 
 				temp, err := strconv.Atoi(strings.TrimSpace(string(val)))
 				if err != nil {
-					panic(err)
+					log.Error().Str("id", ds.Id).Msg("failed to read temperature")
+					continue
 				}
 				log.Debug().Str("id", ds.Id).Int("temp", temp).Msg("read temperature")
 				ds.mu.Lock()
