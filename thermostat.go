@@ -26,7 +26,7 @@ type (
 func NewThermostat(target int, rs *RemoteSwitch, temp *sensors.DS1820, options ...ThermostatOption) *Thermostat {
 	therm := Thermostat{
 		SetTemp:      target,
-		MaxDelta:     2000,
+		MaxDelta:     1000,
 		Heat:         false,
 		RemoteSwitch: rs,
 		TempSensor:   temp,
@@ -56,11 +56,14 @@ func (therm *Thermostat) Loop() {
 		temp := therm.TempSensor.Read()
 		delta := therm.SetTemp - temp
 
-		log.Debug().
+		clog := log.With().
 			Int("have", temp).
 			Int("want", therm.SetTemp).
 			Int("delta", delta).
 			Int("maxdelta", therm.MaxDelta).
+			Logger()
+
+		clog.Debug().
 			Bool("active", therm.Heat).
 			Bool("switch", therm.RemoteSwitch.On).
 			Msg("thermostat running")
@@ -68,15 +71,19 @@ func (therm *Thermostat) Loop() {
 		if therm.Heat {
 			if delta > therm.MaxDelta {
 				if !therm.RemoteSwitch.On {
+					clog.Info().Msg("heater on")
+
 					therm.RemoteSwitch.TurnOn()
 				}
 			} else {
 				if therm.RemoteSwitch.On {
+					clog.Info().Msg("heater off")
 					therm.RemoteSwitch.TurnOff()
 				}
 			}
 		} else {
 			if therm.RemoteSwitch.On {
+				clog.Info().Msg("thermostat disabled")
 				therm.RemoteSwitch.TurnOff()
 			}
 		}
@@ -101,14 +108,14 @@ func (therm *Thermostat) Stop() {
 }
 
 func (therm *Thermostat) HeatOn() {
-	log.Info().Msg("turn heat on")
+	log.Info().Msg("thermostat active")
 	therm.mu.Lock()
 	therm.Heat = true
 	therm.mu.Unlock()
 }
 
 func (therm *Thermostat) HeatOff() {
-	log.Info().Msg("turn heat off")
+	log.Info().Msg("thermostat inactive")
 	therm.mu.Lock()
 	therm.Heat = false
 	therm.mu.Unlock()
