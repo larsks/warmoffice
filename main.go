@@ -154,10 +154,11 @@ func (app *Application) Loop() {
 	app.Heater.Start()
 
 	for !app.QuitFlag {
-		log.Debug().Msgf("state = %s, delta = %s, lastactive = %s",
-			app.State,
-			time.Since(app.Timer),
-			time.Since(app.MotionSensor.LastActivity))
+		log.Debug().
+			Str("state", app.State.String()).
+			Dur("state_time", time.Since(app.Timer)).
+			Dur("last_activity", time.Since(app.MotionSensor.LastActivity)).
+			Msg("warmoffice status")
 
 		start_state := app.State
 
